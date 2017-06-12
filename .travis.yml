@@ -18,6 +18,6 @@ before_script:
   - export PATH=$PWD/maven/bin:${PATH}
   - hash -r
 
-script: RUN_TESTS=true ./build-all.sh -Pbree
+script: RUN_TESTS=true QUIET_DOWNLOAD=true ./build-all.sh -Pbree -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
 
 
