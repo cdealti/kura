@@ -11,7 +11,47 @@
     <OCD id="org.eclipse.kura.wire.Logger" 
          name="Logger" 
          description="A wire component which logs data as received from upstream connected Wire Components">
-         
+
+         <AD id="log.directory"  
+            name="log.directory"
+            type="String"
+            cardinality="0" 
+            required="true"
+            default="/var/log/" 
+            description="The directory where logs are saved."/>
+
+         <AD id="log.file.prefix"  
+            name="log.file.prefix"
+            type="String"
+            cardinality="0" 
+            required="false"
+            default="" 
+            description="The prefix of the log file. If left blank the prefix is set to the logger name."/>
+
+         <AD id="log.csv.separator"  
+            name="log.csv.separator"
+            type="String"
+            cardinality="0" 
+            required="true"
+            default="\,"
+            description="The CSV separator."/>
+
+         <AD id="log.max.rows"  
+            name="log.max.rows"
+            type="Integer"
+            cardinality="0" 
+            required="true"
+            default="40000" 
+            description="The maximum number of rows in a log file."/>
+
+         <AD id="log.max.count"  
+            name="log.max.count"
+            type="Integer"
+            cardinality="0" 
+            required="true"
+            default="10" 
+            description="The maximum number of log files stored on disk."/>
+                   
          <AD id="log.verbosity"
             name="log.verbosity"
             type="String"

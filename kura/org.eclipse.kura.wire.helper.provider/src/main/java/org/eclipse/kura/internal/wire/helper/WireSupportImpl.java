@@ -88,7 +88,12 @@ final class WireSupportImpl implements WireSupport {
     /** {@inheritDoc} */
     @Override
     public synchronized void emit(final List<WireRecord> wireRecords) {
-        requireNonNull(wireRecords, message.wireRecordsNonNull());
+        // requireNonNull(wireRecords, message.wireRecordsNonNull());
+        // FIXME: localization may be expensive so we remove it for the time being
+        if (wireRecords == null) {
+            return;
+        }
+
         if (this.wireSupporter instanceof WireEmitter) {
             final WireEnvelope wei = new WireEnvelope(emitterPid, wireRecords);
             for (final Wire wire : this.outgoingWires) {
