@@ -16,8 +16,10 @@ package org.eclipse.kura.asset.provider;
 
 import static java.util.Objects.nonNull;
 import static java.util.Objects.requireNonNull;
+import static org.eclipse.kura.asset.provider.AssetConstants.ASSET_CHANNEL_LISTENER_PROP;
 import static org.eclipse.kura.asset.provider.AssetConstants.ASSET_DESC_PROP;
 import static org.eclipse.kura.asset.provider.AssetConstants.ASSET_DRIVER_PROP;
+import static org.eclipse.kura.asset.provider.AssetConstants.ASSET_PER_ASSET_TIMESTAMP_PROP;
 import static org.eclipse.kura.channel.ChannelFlag.FAILURE;
 import static org.eclipse.kura.channel.ChannelType.READ;
 import static org.eclipse.kura.channel.ChannelType.READ_WRITE;
@@ -141,7 +143,7 @@ public class BaseAsset implements Asset, SelfConfiguringComponent {
     private final Lock monitor;
 
     /** The configurable properties of this service. */
-    private Map<String, Object> properties;
+    protected Map<String, Object> properties;
 
     private ServiceTracker<Driver, Driver> driverServiceTracker;
 
@@ -336,8 +338,30 @@ public class BaseAsset implements Asset, SelfConfiguringComponent {
         driverNameAd.setDescription(message.driverName());
         driverNameAd.setRequired(true);
 
+        final Tad channelListenerAd = new Tad();
+        channelListenerAd.setId(ASSET_CHANNEL_LISTENER_PROP.value());
+        channelListenerAd.setName(ASSET_CHANNEL_LISTENER_PROP.value());
+        channelListenerAd.setCardinality(0);
+        channelListenerAd.setType(Tscalar.BOOLEAN);
+        channelListenerAd.setDefault(String.valueOf(false));
+        // FIXME: internationalization
+        channelListenerAd.setDescription("Enable channel listener");
+        channelListenerAd.setRequired(true);
+
+        final Tad timestampAd = new Tad();
+        timestampAd.setId(ASSET_PER_ASSET_TIMESTAMP_PROP.value());
+        timestampAd.setName(ASSET_PER_ASSET_TIMESTAMP_PROP.value());
+        timestampAd.setCardinality(0);
+        timestampAd.setType(Tscalar.BOOLEAN);
+        timestampAd.setDefault(String.valueOf(true));
+        // FIXME: internationalization
+        timestampAd.setDescription("Per-channel vs single timestamp");
+        timestampAd.setRequired(true);
+
         mainOcd.addAD(assetDescriptionAd);
         mainOcd.addAD(driverNameAd);
+        mainOcd.addAD(channelListenerAd);
+        mainOcd.addAD(timestampAd);
 
         final Map<String, Object> props = CollectionUtil.newHashMap();
         for (final Map.Entry<String, Object> entry : this.properties.entrySet()) {
@@ -424,8 +448,13 @@ public class BaseAsset implements Asset, SelfConfiguringComponent {
     /** {@inheritDoc} */
     @Override
     public List<ChannelRecord> readAllChannels() throws KuraException {
-        requireNonNull(this.driver, message.driverNonNull());
-        logger.debug(message.readingChannels());
+        // requireNonNull(this.driver, message.driverNonNull());
+        // FIXME: this can be expensive
+        requireNonNull(this.driver, "Driver is null");
+
+        if (logger.isDebugEnabled()) {
+            logger.debug(message.readingChannels());
+        }
 
         final List<ChannelRecord> channelRecords;
 
@@ -443,7 +472,9 @@ public class BaseAsset implements Asset, SelfConfiguringComponent {
             this.monitor.unlock();
         }
 
-        logger.debug(message.readingChannelsDone());
+        if (logger.isDebugEnabled()) {
+            logger.debug(message.readingChannelsDone());
+        }
         return channelRecords;
     }
 

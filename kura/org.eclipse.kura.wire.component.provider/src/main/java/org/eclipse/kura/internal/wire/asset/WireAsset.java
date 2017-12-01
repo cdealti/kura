@@ -28,12 +28,15 @@ import java.util.Map.Entry;
 import org.eclipse.kura.KuraException;
 import org.eclipse.kura.asset.Asset;
 import org.eclipse.kura.asset.AssetConfiguration;
+import org.eclipse.kura.asset.provider.AssetConstants;
 import org.eclipse.kura.asset.provider.BaseAsset;
 import org.eclipse.kura.channel.Channel;
 import org.eclipse.kura.channel.ChannelFlag;
 import org.eclipse.kura.channel.ChannelRecord;
 import org.eclipse.kura.channel.ChannelStatus;
 import org.eclipse.kura.channel.ChannelType;
+import org.eclipse.kura.channel.listener.ChannelEvent;
+import org.eclipse.kura.channel.listener.ChannelListener;
 import org.eclipse.kura.localization.LocalizationAdapter;
 import org.eclipse.kura.localization.resources.WireMessages;
 import org.eclipse.kura.type.TypedValue;
@@ -92,7 +95,7 @@ import org.slf4j.LoggerFactory;
  * @see WireRecord
  * @see Asset
  */
-public final class WireAsset extends BaseAsset implements WireEmitter, WireReceiver {
+public final class WireAsset extends BaseAsset implements WireEmitter, WireReceiver, ChannelListener {
 
     private static final String ERROR_NOT_SPECIFIED_MESSAGE = "ERROR NOT SPECIFIED";
 
@@ -112,6 +115,8 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
     private volatile WireHelperService wireHelperService;
 
     private WireSupport wireSupport;
+
+    private boolean perChannelTimestamp;
 
     /**
      * Binds the Wire Helper Service.
@@ -149,6 +154,8 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
     protected void activate(final ComponentContext componentContext, final Map<String, Object> properties) {
         logger.debug(message.activatingWireAsset());
         super.activate(componentContext, properties);
+        perChannelTimestamp = isPerChannelTimestamp();
+        tryRegisterChannelListener();
         this.wireSupport = this.wireHelperService.newWireSupport(this);
         logger.debug(message.activatingWireAssetDone());
     }
@@ -163,6 +170,9 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
     public void updated(final Map<String, Object> properties) {
         logger.debug(message.updatingWireAsset());
         super.updated(properties);
+        perChannelTimestamp = isPerChannelTimestamp();
+        tryUnregisterChannelListener();
+        tryRegisterChannelListener();
         logger.debug(message.updatingWireAssetDone());
     }
 
@@ -175,6 +185,7 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
     @Override
     protected void deactivate(final ComponentContext context) {
         logger.debug(message.deactivatingWireAsset());
+        tryUnregisterChannelListener();
         super.deactivate(context);
         logger.debug(message.deactivatingWireAssetDone());
     }
@@ -278,16 +289,25 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
      *             if provided records list is empty
      */
     private void emitChannelRecords(final List<ChannelRecord> channelRecords) {
-        requireNonNull(channelRecords, message.channelRecordsNonNull());
-        if (channelRecords.isEmpty()) {
-            throw new IllegalArgumentException(message.channelRecordsNonEmpty());
+        // requireNonNull(channelRecords, message.channelRecordsNonNull());
+        // FIXME: localization may be expensive so we remove it for the time being
+        if (channelRecords == null || channelRecords.isEmpty()) {
+            return;
         }
+
+        // if (channelRecords.isEmpty()) {
+        // throw new IllegalArgumentException(message.channelRecordsNonEmpty());
+        // }
 
         final Map<String, TypedValue<?>> wireRecordProperties = new HashMap<>();
         try {
             wireRecordProperties.put(ASSET_NAME, TypedValues.newStringValue(getKuraServicePid()));
         } catch (KuraException e) {
             logger.error(message.configurationNonNull(), e);
+        }
+
+        if (!perChannelTimestamp) {
+            wireRecordProperties.put(TIMESTAMP, TypedValues.newLongValue(channelRecords.get(0).getTimestamp()));
         }
 
         for (final ChannelRecord channelRecord : channelRecords) {
@@ -305,8 +325,10 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
 
             wireRecordProperties.put(channelName, typedValue);
 
-            wireRecordProperties.put(channelName + PROPERTY_SEPARATOR + TIMESTAMP,
-                    TypedValues.newLongValue(channelRecord.getTimestamp()));
+            if (perChannelTimestamp) {
+                wireRecordProperties.put(channelName + PROPERTY_SEPARATOR + TIMESTAMP,
+                        TypedValues.newLongValue(channelRecord.getTimestamp()));
+            }
         }
         final WireRecord wireRecord = new WireRecord(wireRecordProperties);
         this.wireSupport.emit(Arrays.asList(wireRecord));
@@ -347,6 +369,52 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
         }
     }
 
+    // FIXME: AssetConfiguration (API) should answer this
+    private boolean isChannelListenEnabled() {
+        boolean enabled = false;
+        final Object o = properties.get(AssetConstants.ASSET_CHANNEL_LISTENER_PROP.value());
+        if (o instanceof Boolean) {
+            enabled = (boolean) o;
+        }
+
+        return enabled;
+    }
+
+    // FIXME: AssetConfiguration (API) should answer this
+    private boolean isPerChannelTimestamp() {
+        boolean enabled = false;
+        final Object o = properties.get(AssetConstants.ASSET_PER_ASSET_TIMESTAMP_PROP.value());
+        if (o instanceof Boolean) {
+            enabled = (boolean) o;
+        }
+
+        return enabled;
+    }
+
+    private void tryRegisterChannelListener() {
+        if (isChannelListenEnabled()) {
+            try {
+                super.registerChannelListener(getAnyChannelName(), this);
+            } catch (KuraException e) {
+                // FIXME: internationalization
+                logger.warn("Failed to register driver listener", e);
+            }
+        }
+    }
+
+    private void tryUnregisterChannelListener() {
+        try {
+            super.unregisterChannelListener(this);
+        } catch (KuraException e) {
+            // FIXME: internationalization
+            logger.warn("Failed to unregister driver listener", e);
+        }
+    }
+
+    private String getAnyChannelName() {
+        return getAssetConfiguration().getAssetChannels().entrySet().iterator().next().getKey();
+    }
+
     /** {@inheritDoc} */
     @Override
     public Object polled(final Wire wire) {
@@ -363,5 +431,14 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
     @Override
     public void updated(final Wire wire, final Object value) {
         this.wireSupport.updated(wire, value);
+    }
+
+    @Override
+    public void onChannelEvent(ChannelEvent event) {
+        try {
+            emitChannelRecords(readAllChannels());
+        } catch (final KuraException e) {
+            logger.error(message.errorPerformingRead(), e);
+        }
     }
 }

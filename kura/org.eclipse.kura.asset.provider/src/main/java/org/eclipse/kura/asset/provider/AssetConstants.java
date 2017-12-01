@@ -30,6 +30,10 @@ public enum AssetConstants {
     /** Driver PID Property to be used in the configuration. */
     ASSET_DRIVER_PROP("driver.pid"),
 
+    ASSET_CHANNEL_LISTENER_PROP("enable.channel.listener"),
+
+    ASSET_PER_ASSET_TIMESTAMP_PROP("per.channel.timestamp"),
+
     /** Name Property to be used in the configuration. */
     NAME(CHANNEL_DEFAULT_PROPERTY_PREFIX.value() + "name"),
 

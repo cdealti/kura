@@ -120,7 +120,7 @@
         <sonar.jacoco.reportPath>target/jacoco.exec</sonar.jacoco.reportPath>
 
         <!-- BND baseline plugin -->
-        <bnd.baseline.version>3.4.0-SNAPSHOT</bnd.baseline.version>
+        <bnd.baseline.version>3.5.0</bnd.baseline.version>
         <bnd.baseline.continueOnError>false</bnd.baseline.continueOnError>
     </properties>
 
