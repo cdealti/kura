@@ -37,6 +37,7 @@ import org.eclipse.kura.channel.ChannelStatus;
 import org.eclipse.kura.channel.ChannelType;
 import org.eclipse.kura.channel.listener.ChannelEvent;
 import org.eclipse.kura.channel.listener.ChannelListener;
+import org.eclipse.kura.driver.Driver;
 import org.eclipse.kura.localization.LocalizationAdapter;
 import org.eclipse.kura.localization.resources.WireMessages;
 import org.eclipse.kura.type.TypedValue;
@@ -155,7 +156,6 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
         logger.debug(message.activatingWireAsset());
         super.activate(componentContext, properties);
         perChannelTimestamp = isPerChannelTimestamp();
-        tryRegisterChannelListener();
         this.wireSupport = this.wireHelperService.newWireSupport(this);
         logger.debug(message.activatingWireAssetDone());
     }
@@ -171,8 +171,6 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
         logger.debug(message.updatingWireAsset());
         super.updated(properties);
         perChannelTimestamp = isPerChannelTimestamp();
-        tryUnregisterChannelListener();
-        tryRegisterChannelListener();
         logger.debug(message.updatingWireAssetDone());
     }
 
@@ -185,7 +183,6 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
     @Override
     protected void deactivate(final ComponentContext context) {
         logger.debug(message.deactivatingWireAsset());
-        tryUnregisterChannelListener();
         super.deactivate(context);
         logger.debug(message.deactivatingWireAssetDone());
     }
@@ -200,6 +197,15 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
     @Override
     protected String getFactoryPid() {
         return CONF_PID;
+    }
+
+    @Override
+    public synchronized void setDriver(Driver driver) {
+        super.setDriver(driver);
+        if (driver != null) {
+            tryUnregisterChannelListener();
+            tryRegisterChannelListener();
+        }
     }
 
     /**
