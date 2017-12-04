@@ -41,17 +41,37 @@
             type="Integer"
             cardinality="0" 
             required="true"
-            default="40000" 
+            default="40000"
+            min="0"
             description="The maximum number of rows in a log file."/>
+            
+         <AD id="log.max.in.memory.envelopes" 
+            name="log.max.in.memory.envelopes"
+            type="Integer"
+            cardinality="0" 
+            required="true"
+            default="10"
+            min="0"
+            description="The maximum number of in-memory envelopes."/>            
 
          <AD id="log.max.count"  
             name="log.max.count"
             type="Integer"
             cardinality="0" 
             required="true"
-            default="10" 
+            default="10"
+            min="0"
             description="The maximum number of log files stored on disk."/>
-                   
+
+         <AD id="log.stream.buffer.size" 
+            name="log.stream.buffer.size"
+            type="Integer"
+            cardinality="0" 
+            required="true"
+            default="8192"
+            min="0"
+            description="The size in bytes of the underlying output stream."/>
+                        
          <AD id="log.verbosity"
             name="log.verbosity"
             type="String"
