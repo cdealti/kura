@@ -14,17 +14,17 @@
 package org.eclipse.kura.internal.wire.logger;
 
 import static java.util.Objects.isNull;
-import static java.util.Objects.nonNull;
 import static java.util.Objects.requireNonNull;
-import static org.eclipse.kura.internal.wire.logger.LoggingVerbosity.QUIET;
 
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +34,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.eclipse.kura.configuration.ConfigurableComponent;
-import org.eclipse.kura.configuration.ConfigurationService;
 import org.eclipse.kura.localization.LocalizationAdapter;
 import org.eclipse.kura.localization.resources.WireMessages;
 import org.eclipse.kura.type.TypedValue;
@@ -57,39 +56,21 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
 
     private static final WireMessages message = LocalizationAdapter.adapt(WireMessages.class);
 
-    private static final String DEFAULT_LOG_LEVEL = QUIET.name();
-
-    private static final String PROP_LOG_LEVEL = "log.verbosity";
-
-    private static final String PROP_FILE_MAX_ROWS = "log.max.rows";
-
-    private static final int DEFAULT_FILE_MAX_ROWS = 40000;
-
-    private static final String PROP_CSV_SEPARATOR = "log.csv.separator";
-
-    private static final String DEFAULT_CSV_SEPARATOR = ",";
-
-    private static final String PROP_LOG_DIRECTORY = "log.directory";
-
-    private static final String DEFAULT_LOG_DIRECTORY = "/var/log/";
-
-    private static final String PROP_LOG_FILE_PREFIX = "log.file.prefix";
-
-    private static final String DEFAULT_LOG_FILE_PREFIX = "wirelog";
-
-    private static final String PROP_MAX_LOGS = "log.max.count";
-
-    private static final int DEFAULT_MAX_LOGS = 10;
-
     private volatile WireHelperService wireHelperService;
 
     private WireSupport wireSupport;
 
-    private Map<String, Object> properties;
+    private LoggerOptions options;
+
+    private PrintWriter printWriter;
 
     private List<WireEnvelope> envelopes;
 
+    private int lineCount;
+
     private Set<String> columns;
+
+    private boolean columnsChanged;
 
     /**
      * Binds the Wire Helper Service.
@@ -124,10 +105,10 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
      *            the properties
      */
     protected void activate(final ComponentContext componentContext, final Map<String, Object> properties) {
-        this.properties = properties;
         this.wireSupport = this.wireHelperService.newWireSupport(this);
+        this.options = new LoggerOptions(properties);
         this.envelopes = new LinkedList<>();
-        this.columns = new HashSet<>();
+        this.columns = new LinkedHashSet<>();
         logger.debug(message.activatingLoggerDone());
     }
 
@@ -139,7 +120,10 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
      */
     public void updated(final Map<String, Object> properties) {
         logger.debug(message.updatingLogger());
-        this.properties = properties;
+        writeRemainingEnvelopes();
+        // updating the component also resets the CSV column set learnt so far
+        clearColumns();
+        this.options = new LoggerOptions(properties);
         logger.debug(message.updatingLoggerDone());
     }
 
@@ -151,90 +135,137 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
      */
     protected void deactivate(final ComponentContext componentContext) {
         logger.debug(message.deactivatingLogger());
-        // remained for debugging purposes
+        writeRemainingEnvelopes();
         logger.debug(message.deactivatingLoggerDone());
     }
 
     /** {@inheritDoc} */
     @Override
-    public void onWireReceive(final WireEnvelope wireEnvelope) {
+    public synchronized void onWireReceive(final WireEnvelope wireEnvelope) {
         if (wireEnvelope == null) {
             return;
         }
-        updateColumns(wireEnvelope);
-        addEnvelope(wireEnvelope);
+        processEnvelope(wireEnvelope);
     }
 
-    private synchronized void addEnvelope(final WireEnvelope envelope) {
+    private void processEnvelope(final WireEnvelope envelope) {
+
+        columnsChanged = updateColumns(envelope) || columnsChanged;
+
         envelopes.add(envelope);
-        if (envelopes.size() >= getFileMaxRows()) {
+
+        if (envelopes.size() >= options.getMaxInMemoryEnvelopes()) {
+            if (columnsChanged) {
+                closeWriter();
+                columnsChanged = false;
+            }
+
             writeEnvelopes();
-            envelopes.clear();
-            garbageCollectionOldLogs();
+            if (lineCount >= options.getFileMaxRows()) {
+                closeWriter();
+            }
         }
     }
 
     private void writeEnvelopes() {
-        long lid = newLogID();
+        if (envelopes.isEmpty()) {
+            return;
+        }
 
-        // FIXME: encoding
-        try (final PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(getLogFile(lid))))) {
-            writeHeader(out);
-            writeLines(out);
-        } catch (IOException e) {
-            // FIXME:internationalization
-            logger.error("Failed to write log file", e);
+        if (printWriter == null) {
+            FileOutputStream fos;
+            try {
+                long lid = newLogID();
+                fos = new FileOutputStream(getLogFile(lid));
+            } catch (IOException e) {
+                logger.error("Failed to create CSV file", e);
+                return;
+            }
+
+            printWriter = new PrintWriter(new BufferedWriter(new OutputStreamWriter(fos, StandardCharsets.UTF_8),
+                    options.getStreamBufferSize()));
+            lineCount = 0;
+        }
+
+        // write the header once
+        if (lineCount == 0) {
+            writeHeader();
+        }
+
+        writeLines();
+
+        printWriter.flush();
+
+        envelopes.clear();
+    }
+
+    private synchronized void writeRemainingEnvelopes() {
+        writeEnvelopes();
+        closeWriter();
+    }
+
+    private void closeWriter() {
+        if (printWriter != null) {
+            printWriter.close();
+            printWriter = null;
+            garbageCollectionOldLogs();
         }
     }
 
-    private void writeLines(final PrintWriter out) {
+    private synchronized void clearColumns() {
+        columns.clear();
+        columnsChanged = false;
+    }
+
+    private void writeLines() {
         for (WireEnvelope envelope : envelopes) {
-            writeCsvLines(out, envelope);
+            writeCsvLines(envelope);
         }
     }
 
-    private void writeCsvLines(final PrintWriter out, final WireEnvelope envelope) {
+    private void writeCsvLines(final WireEnvelope envelope) {
         final List<WireRecord> records = envelope.getRecords();
         if (records != null) {
             for (WireRecord record : records) { // Typically there's only one record per envelope
                 final Map<String, TypedValue<?>> props = record.getProperties();
                 if (props != null) {
                     StringBuilder sb = new StringBuilder();
-                    // we assume that the iteration order is the same if the set is not modified in between
                     for (String column : columns) {
                         final TypedValue<?> propValue = props.get(column);
                         if (propValue != null) {
                             sb.append(propValue.getValue());
                         }
-                        sb.append(getCsvSeparator());
+                        sb.append(options.getCsvSeparator());
                     }
                     sb.setLength(sb.length() - 1); // remove last separator
-                    out.println(sb.toString());
+                    printWriter.println(sb.toString());
+                    lineCount++;
                 }
             }
         }
     }
 
-    private void writeHeader(final PrintWriter out) {
+    private void writeHeader() {
         StringBuilder sb = new StringBuilder();
-        // we assume that the iteration order is the same as the one above
         // FIXME: code duplicated from above (use lambda)
         for (String column : columns) {
             sb.append(column);
-            sb.append(getCsvSeparator());
+            sb.append(options.getCsvSeparator());
         }
         sb.setLength(sb.length() - 1); // remove last separator
-        out.println(sb.toString());
+        printWriter.println(sb.toString());
     }
 
-    private synchronized void updateColumns(final WireEnvelope envelopes) {
+    private boolean updateColumns(final WireEnvelope envelopes) {
+        boolean changed = false;
         final List<WireRecord> records = envelopes.getRecords();
         if (records != null) {
             for (WireRecord record : records) { // typically there's only one record
                 final Set<String> keys = record.getProperties().keySet();
-                columns.addAll(keys);
+                changed = columns.addAll(keys) || changed;
             }
         }
+        return changed;
     }
 
     private void garbageCollectionOldLogs() {
@@ -243,7 +274,7 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
         TreeSet<Long> lids = getLogs();
 
         int currCount = lids.size();
-        int maxCount = getMaxLogs();
+        int maxCount = options.getMaxLogs();
         while (currCount > maxCount && !lids.isEmpty()) { // stop if count reached or no more snapshots remain
 
             // preserve log ID 0 as this will be considered the seeding
@@ -277,76 +308,15 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
         return lid;
     }
 
-    private int getFileMaxRows() {
-        int result = DEFAULT_FILE_MAX_ROWS;
-        final Object o = this.properties.get(PROP_FILE_MAX_ROWS);
-        if (o instanceof Integer) {
-            result = (int) o;
-        }
-        return result;
-    }
-
-    private String getCsvSeparator() {
-        String result = DEFAULT_CSV_SEPARATOR;
-        final Object o = this.properties.get(PROP_CSV_SEPARATOR);
-        if (o instanceof Character) {
-            result = (String) o;
-        }
-        return result;
-    }
-
-    private String getLogDirectory() {
-        String result = DEFAULT_LOG_DIRECTORY;
-        final Object o = this.properties.get(PROP_LOG_DIRECTORY);
-        if (o instanceof String) {
-            result = (String) o;
-        }
-        return result;
-    }
-
-    private String getLogFilePrefix() {
-        String result = DEFAULT_LOG_FILE_PREFIX;
-        final String pid = getOwnPid();
-        if (pid != null && !pid.isEmpty()) {
-            result = pid;
-        }
-        final Object o = this.properties.get(PROP_LOG_FILE_PREFIX);
-        if (o instanceof String) {
-            final String configuredPrefix = (String) o;
-            if (!configuredPrefix.isEmpty()) {
-                result = configuredPrefix;
-            }
-        }
-        return result;
-    }
-
-    private int getMaxLogs() {
-        int result = DEFAULT_MAX_LOGS;
-        final Object o = this.properties.get(PROP_MAX_LOGS);
-        if (o instanceof Integer) {
-            result = (Integer) o;
-        }
-        return result;
-    }
-
-    private String getOwnPid() {
-        String result = null;
-        final Object o = this.properties.get(ConfigurationService.KURA_SERVICE_PID);
-        if (o instanceof String) {
-            result = (String) o;
-        }
-        return result;
-    }
-
     private TreeSet<Long> getLogs() {
         // keeps the list of logs ordered
         TreeSet<Long> ids = new TreeSet<>();
-        String logDir = getLogDirectory();
+        String logDir = options.getLogDirectory();
         if (logDir != null) {
             File fLogDir = new File(logDir);
             File[] files = fLogDir.listFiles();
             if (files != null) {
-                Pattern p = Pattern.compile(getLogFilePrefix() + "_([0-9]+)\\.csv");
+                Pattern p = Pattern.compile(options.getLogFilePrefix() + "_([0-9]+)\\.csv");
                 for (File file : files) {
                     Matcher m = p.matcher(file.getName());
                     if (m.matches()) {
@@ -359,26 +329,17 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
     }
 
     private File getLogFile(long id) {
-        String logDir = getLogDirectory();
+        String logDir = options.getLogDirectory();
 
         if (logDir == null) {
             return null;
         }
 
         StringBuilder sbDir = new StringBuilder(logDir);
-        sbDir.append(File.separator).append(getLogFilePrefix()).append("_").append(id).append(".csv");
+        sbDir.append(File.separator).append(options.getLogFilePrefix()).append("_").append(id).append(".csv");
 
         String log = sbDir.toString();
         return new File(log);
-    }
-
-    private String getLoggingLevel() {
-        String logLevel = DEFAULT_LOG_LEVEL;
-        final Object configuredLogLevel = this.properties.get(PROP_LOG_LEVEL);
-        if (nonNull(configuredLogLevel) && configuredLogLevel instanceof String) {
-            logLevel = String.valueOf(configuredLogLevel);
-        }
-        return logLevel;
     }
 
     /** {@inheritDoc} */
