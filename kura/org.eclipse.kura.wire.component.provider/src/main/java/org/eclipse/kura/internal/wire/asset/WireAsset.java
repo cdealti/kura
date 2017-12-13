@@ -40,6 +40,7 @@ import org.eclipse.kura.channel.listener.ChannelListener;
 import org.eclipse.kura.driver.Driver;
 import org.eclipse.kura.localization.LocalizationAdapter;
 import org.eclipse.kura.localization.resources.WireMessages;
+import org.eclipse.kura.type.StringValue;
 import org.eclipse.kura.type.TypedValue;
 import org.eclipse.kura.type.TypedValues;
 import org.eclipse.kura.util.collection.CollectionUtil;
@@ -100,9 +101,13 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
 
     private static final String ERROR_NOT_SPECIFIED_MESSAGE = "ERROR NOT SPECIFIED";
 
-    private static final String ASSET_NAME = "assetName";
+    private static final String PROP_ASSET_NAME = "assetName";
 
-    private static final String TIMESTAMP = "timestamp";
+    private static final String PROP_SUFFIX_TIMESTAMP = "timestamp";
+
+    private static final String PROP_SUFFIX_ERROR = "error";
+
+    private static final String NOERROR = "";
 
     private static final String PROPERTY_SEPARATOR = "_";
 
@@ -307,13 +312,14 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
 
         final Map<String, TypedValue<?>> wireRecordProperties = new HashMap<>();
         try {
-            wireRecordProperties.put(ASSET_NAME, TypedValues.newStringValue(getKuraServicePid()));
+            wireRecordProperties.put(PROP_ASSET_NAME, TypedValues.newStringValue(getKuraServicePid()));
         } catch (KuraException e) {
             logger.error(message.configurationNonNull(), e);
         }
 
         if (!perChannelTimestamp) {
-            wireRecordProperties.put(TIMESTAMP, TypedValues.newLongValue(channelRecords.get(0).getTimestamp()));
+            wireRecordProperties.put(PROP_SUFFIX_TIMESTAMP,
+                    TypedValues.newLongValue(channelRecords.get(0).getTimestamp()));
         }
 
         for (final ChannelRecord channelRecord : channelRecords) {
@@ -321,18 +327,25 @@ public final class WireAsset extends BaseAsset implements WireEmitter, WireRecei
             final ChannelFlag channelFlag = channelStatus.getChannelFlag();
             final String channelName = channelRecord.getChannelName();
 
-            final TypedValue<?> typedValue;
+            // FIXME: always output the channel exception message or "OK" if read was successful.
+            // A logging application is usually interested to errors.
+            // This behavior, outputting the channel status (and what format) should be a configurable option.
+            StringValue exceptionMessage = null;
             if (channelFlag == ChannelFlag.FAILURE) {
-                logErrorMessage(channelStatus);
-                continue;
+                exceptionMessage = TypedValues.newStringValue(channelStatus.getExceptionMessage());
             } else {
-                typedValue = channelRecord.getValue();
+                exceptionMessage = TypedValues.newStringValue(NOERROR);
+            }
+            wireRecordProperties.put(channelName + PROPERTY_SEPARATOR + PROP_SUFFIX_ERROR, exceptionMessage);
+
+            // FIXME: in case the channel read was not successful, should we output a special value (or null)?
+            final TypedValue<?> typedValue = channelRecord.getValue();
+            if (typedValue != null) {
+                wireRecordProperties.put(channelName, typedValue);
             }
 
-            wireRecordProperties.put(channelName, typedValue);
-
             if (perChannelTimestamp) {
-                wireRecordProperties.put(channelName + PROPERTY_SEPARATOR + TIMESTAMP,
+                wireRecordProperties.put(channelName + PROPERTY_SEPARATOR + PROP_SUFFIX_TIMESTAMP,
                         TypedValues.newLongValue(channelRecord.getTimestamp()));
             }
         }
