@@ -92,7 +92,7 @@ public class LoggerOptions {
     private String _getCsvSeparator() {
         String result = DEFAULT_CSV_SEPARATOR;
         final Object o = this.properties.get(PROP_CSV_SEPARATOR);
-        if (o instanceof Character) {
+        if (o instanceof String) {
             result = (String) o;
         }
         return result;

@@ -225,6 +225,7 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
 
     private void writeCsvLines(final WireEnvelope envelope) {
         final List<WireRecord> records = envelope.getRecords();
+        final String separator = options.getCsvSeparator();
         if (records != null) {
             for (WireRecord record : records) { // Typically there's only one record per envelope
                 final Map<String, TypedValue<?>> props = record.getProperties();
@@ -235,9 +236,9 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
                         if (propValue != null) {
                             sb.append(propValue.getValue());
                         }
-                        sb.append(options.getCsvSeparator());
+                        sb.append(separator);
                     }
-                    sb.setLength(sb.length() - 1); // remove last separator
+                    sb.setLength(sb.length() - separator.length()); // remove last separator
                     printWriter.println(sb.toString());
                     lineCount++;
                 }
@@ -247,12 +248,13 @@ public final class Logger implements WireReceiver, ConfigurableComponent {
 
     private void writeHeader() {
         StringBuilder sb = new StringBuilder();
+        final String separator = options.getCsvSeparator();
         // FIXME: code duplicated from above (use lambda)
         for (String column : columns) {
             sb.append(column);
-            sb.append(options.getCsvSeparator());
+            sb.append(separator);
         }
-        sb.setLength(sb.length() - 1); // remove last separator
+        sb.setLength(sb.length() - separator.length()); // remove last separator
         printWriter.println(sb.toString());
     }
 
