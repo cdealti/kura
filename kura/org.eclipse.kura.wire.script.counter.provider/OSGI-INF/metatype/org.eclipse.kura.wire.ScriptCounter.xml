@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Copyright (c) 2017 Eurotech and/or its affiliates and others
+
+     All rights reserved. This program and the accompanying materials
+     are made available under the terms of the Eclipse Public License v1.0
+     which accompanies this distribution, and is available at
+     http://www.eclipse.org/legal/epl-v10.html
+-->
+<MetaData xmlns="http://www.osgi.org/xmlns/metatype/v1.2.0" localization="en_us">
+    <OCD id="org.eclipse.kura.wire.ScriptCounter" 
+         name="Javascript Counter" 
+         description="A wire component that implements a counter using JavaScript.">
+
+       <AD id="name"
+            name="Name"
+            type="String"
+            cardinality="0"
+            required="true"
+            default="FOO"
+            description="The name of the counter.">
+        </AD>
+
+        <AD id="start.condition"
+            name="Start Condition"
+            type="String"
+            cardinality="0"
+            required="true"
+            default="input.record[0].BAR.getValue() &lt; 0"
+            description="The start condition as an JavaScript program evaluated to a boolean value.|TextArea">
+        </AD>
+
+        <AD id="stop.condition"
+            name="Stop Condition"
+            type="String"
+            cardinality="0"
+            required="true"
+            default="input.record[0].BAR.getValue() &gt; 0"
+            description="The stop condition as an JavaScript program evaluated to a boolean value.|TextArea">
+        </AD>
+
+        <AD id="action"
+            name="Action"
+            type="String"
+            cardinality="0"
+            required="true"
+            default="var counter = stopInput.record[0].FOO.getValue() - startInput.record[0].FOO.getValue()&#13;var outRecord = newWireRecord()&#13;outRecord.FOO_CNT = newIntegerValue(counter)&#13;output.add(outRecord)"
+            description="The action as an JavaScript program.|TextArea">
+        </AD>
+    </OCD>
+    
+    <Designate pid="org.eclipse.kura.wire.ScriptCounter" factoryPid="org.eclipse.kura.wire.ScriptCounter">
+        <Object ocdref="org.eclipse.kura.wire.ScriptCounter"/>
+    </Designate>
+</MetaData>
