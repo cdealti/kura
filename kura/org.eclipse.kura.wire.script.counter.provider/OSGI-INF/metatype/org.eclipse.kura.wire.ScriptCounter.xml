@@ -15,7 +15,7 @@
        <AD id="name"
             name="Name"
             type="String"
-            cardinality="0"
+            cardinality="10"
             required="true"
             default="FOO"
             description="The name of the counter.">
@@ -24,27 +24,27 @@
         <AD id="start.condition"
             name="Start Condition"
             type="String"
-            cardinality="0"
+            cardinality="10"
             required="true"
-            default="input.record[0].BAR.getValue() &lt; 0"
+            default="input.records[0].BAR.getValue() &lt; 0"
             description="The start condition as an JavaScript program evaluated to a boolean value.|TextArea">
         </AD>
 
         <AD id="stop.condition"
             name="Stop Condition"
             type="String"
-            cardinality="0"
+            cardinality="10"
             required="true"
-            default="input.record[0].BAR.getValue() &gt; 0"
+            default="input.records[0].BAR.getValue() &gt; 0"
             description="The stop condition as an JavaScript program evaluated to a boolean value.|TextArea">
         </AD>
 
         <AD id="action"
             name="Action"
             type="String"
-            cardinality="0"
+            cardinality="10"
             required="true"
-            default="var counter = stopInput.record[0].FOO.getValue() - startInput.record[0].FOO.getValue()&#13;var outRecord = newWireRecord()&#13;outRecord.FOO_CNT = newIntegerValue(counter)&#13;output.add(outRecord)"
+            default="var counter = stopInput.records[0].FOO.getValue() - startInput.records[0].FOO.getValue()&#13;var outRecord = newWireRecord()&#13;outRecord.FOO_CNT = newIntegerValue(counter)&#13;output.add(outRecord)"
             description="The action as an JavaScript program.|TextArea">
         </AD>
     </OCD>

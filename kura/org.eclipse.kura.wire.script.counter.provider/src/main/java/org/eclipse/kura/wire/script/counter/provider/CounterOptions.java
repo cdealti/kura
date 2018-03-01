@@ -9,6 +9,8 @@
  *******************************************************************************/
 package org.eclipse.kura.wire.script.counter.provider;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class CounterOptions {
@@ -23,11 +25,35 @@ public class CounterOptions {
     private final String stopCondition;
     private final String action;
 
-    public CounterOptions(Map<String, Object> properties) {
-        this.name = String.valueOf(properties.get(COUNTER_NAME_PROP_NAME));
-        this.startCondition = String.valueOf(START_CONDITION_PROP_NAME);
-        this.stopCondition = String.valueOf(STOP_CONDITION_PROP_NAME);
-        this.action = String.valueOf(ACTION_PROP_NAME);
+    private CounterOptions(Map<String, Object> properties, int index) {
+        this.name = getStringElement(properties.get(COUNTER_NAME_PROP_NAME), index);
+        this.startCondition = getStringElement(properties.get(START_CONDITION_PROP_NAME), index);
+        this.stopCondition = getStringElement(properties.get(STOP_CONDITION_PROP_NAME), index);
+        this.action = getStringElement(properties.get(ACTION_PROP_NAME), index);
+    }
+
+    public static List<CounterOptions> newCounterOptionsList(Map<String, Object> properties) {
+        int count = getCountersCount(properties);
+
+        List<CounterOptions> lco = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            CounterOptions options = new CounterOptions(properties, i);
+            lco.add(options);
+        }
+
+        return lco;
+    }
+
+    private static String getStringElement(Object o, int index) {
+        String value = ((String[]) o)[index];
+        if (value == null) {
+            value = "";
+        }
+        return value;
+    }
+
+    private static int getCountersCount(Map<String, Object> properties) {
+        return ((String[]) properties.get(COUNTER_NAME_PROP_NAME)).length;
     }
 
     public String getName() {

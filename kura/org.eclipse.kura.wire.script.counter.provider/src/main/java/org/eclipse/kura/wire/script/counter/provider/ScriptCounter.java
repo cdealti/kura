@@ -9,6 +9,7 @@
  *******************************************************************************/
 package org.eclipse.kura.wire.script.counter.provider;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -39,7 +40,7 @@ public class ScriptCounter implements WireEmitter, WireReceiver, ConfigurableCom
     private WireSupport wireSupport;
 
     private ScriptEngine scriptEngine;
-    private Counter counter;
+    private List<Counter> counters;
 
     public void bindWireHelperService(final WireHelperService wireHelperService) {
         if (this.wireHelperService == null) {
@@ -72,26 +73,48 @@ public class ScriptCounter implements WireEmitter, WireReceiver, ConfigurableCom
     public synchronized void updated(final Map<String, Object> properties) {
         logger.info("Updating...");
 
-        CounterOptions options = new CounterOptions(properties);
-        try {
-            this.counter = new Counter(options, this.scriptEngine);
-        } catch (ScriptException e) {
-            logger.error("Failed to create counter", e);
-        }
+        initializeCounters(properties);
 
         logger.info("... Updating done");
     }
 
     @Override
     public synchronized void onWireReceive(WireEnvelope wireEnvelope) {
-        if (this.counter == null) {
-            logger.warn("Counter is null");
+        if (this.counters == null) {
+            logger.warn("Counters is null");
             return;
         }
 
-        final List<WireRecord> result = this.counter.update(wireEnvelope);
-        if (result != null) {
+        List<WireRecord> result = new ArrayList<>();
+        for (Counter counter : this.counters) {
+            final List<WireRecord> records = counter.update(wireEnvelope);
+            if (records != null) {
+                result.addAll(records);
+            }
+        }
+
+        if (!result.isEmpty()) {
             this.wireSupport.emit(result);
+        }
+    }
+
+    private void initializeCounters(Map<String, Object> properties) {
+        List<CounterOptions> optionsList;
+        try {
+            optionsList = CounterOptions.newCounterOptionsList(properties);
+        } catch (Throwable t) {
+            logger.error("Cannot parse counter options. Ignoring", t);
+            return;
+        }
+
+        this.counters = new ArrayList<>();
+        for (CounterOptions options : optionsList) {
+            try {
+                Counter counter = new Counter(options, this.scriptEngine);
+                this.counters.add(counter);
+            } catch (ScriptException e) {
+                logger.error("Failed to create counter", e);
+            }
         }
     }
 
