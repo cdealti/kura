@@ -14,20 +14,16 @@ import static java.util.Objects.requireNonNull;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.eclipse.kura.localization.LocalizationAdapter;
 import org.eclipse.kura.wire.WireRecord;
-import org.eclipse.kura.wire.script.filter.localization.ScriptFilterMessages;
 
 public class OutputWireRecordListWrapper {
-
-    private static final ScriptFilterMessages messages = LocalizationAdapter.adapt(ScriptFilterMessages.class);
 
     private List<WireRecord> records;
 
     public void add(Object wrapper) {
-        requireNonNull(wrapper, messages.errorNonNull());
+        requireNonNull(wrapper, "Null wrapper");
         if (!(wrapper instanceof WireRecordWrapper)) {
-            throw new IllegalArgumentException(messages.errorMustBeWireRecord());
+            throw new IllegalArgumentException("Must be WireRecord");
         }
         if (this.records == null) {
             this.records = new ArrayList<>();

@@ -130,7 +130,7 @@ public class Counter {
                 result = fireAction();
             }
         } else {
-            logger.error("Unknwown state {}", this.state);
+            logger.error("Unknown state {}", this.state);
         }
         return result;
     }
@@ -139,7 +139,7 @@ public class Counter {
         try {
             this.action.eval(this.bindings);
         } catch (ScriptException e) {
-            logger.error("Script evalution failed", e);
+            logger.error("Script evaluation failed", e);
         }
         return ((OutputWireRecordListWrapper) this.bindings.get("output")).getRecords();
     }
@@ -204,7 +204,7 @@ public class Counter {
                 result = (Boolean) o;
             }
         } catch (ScriptException e) {
-            logger.error("Script evalution failed", e);
+            logger.error("Script evaluation failed", e);
         }
         return result;
     }
