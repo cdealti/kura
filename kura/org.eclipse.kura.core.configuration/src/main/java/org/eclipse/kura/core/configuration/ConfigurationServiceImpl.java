@@ -31,6 +31,7 @@ import java.util.Date;
 import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -88,6 +89,8 @@ import org.slf4j.LoggerFactory;
 public class ConfigurationServiceImpl implements ConfigurationService, OCDService {
 
     private static final Logger logger = LoggerFactory.getLogger(ConfigurationServiceImpl.class);
+
+    private static final String KURA_DIRTY = "kura.config.dirty";
 
     private ComponentContext ctx;
     private BundleContext bundleContext;
@@ -209,11 +212,34 @@ public class ConfigurationServiceImpl implements ConfigurationService, OCDServic
         this.ctx = componentContext;
         this.bundleContext = componentContext.getBundleContext();
 
-        // Load the latest snapshot and push it to ConfigurationAdmin
+        // assume that if we have a clean configuration, as returned by the Configuration Admin, we have to load the
+        // snapshot
+        boolean clean = true;
         try {
-            loadLatestSnapshotInConfigAdmin();
-        } catch (Exception e) {
-            throw new ComponentException("Error loading latest snapshot", e);
+            String pid = String.valueOf(this.ctx.getProperties().get(Constants.SERVICE_PID));
+            Configuration config = this.configurationAdmin.getConfiguration(pid, "?");
+            Dictionary<String, Object> configProperties = config.getProperties();
+
+            if (configProperties != null) {
+                clean = false;
+            } else {            
+                Hashtable<String, Object> properties = new Hashtable<>();
+                properties.put(KURA_DIRTY, "true");
+                config.update(properties);
+            }
+        } catch (IOException e) {
+            throw new ComponentException("Configuration error", e);
+        }
+
+        logger.info("Is Kura clean? {}", clean);
+
+        if (clean) {
+            // Load the latest snapshot and push it to ConfigurationAdmin
+            try {
+                loadLatestSnapshotInConfigAdmin();
+            } catch (Exception e) {
+                throw new ComponentException("Error loading latest snapshot", e);
+            }
         }
 
         this.bundleTracker = new ComponentMetaTypeBundleTracker(this.ctx.getBundleContext(), this);
